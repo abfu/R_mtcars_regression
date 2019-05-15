@@ -1,0 +1,111 @@
+---
+title: "Regresson Models Course Project"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(reshape2)
+library(car)
+library(MASS)
+```
+
+
+### Relationship between a set of variables and MPG
+
+#### Synopsis
+
+Looking at the data set mtcars in R, this Report will analyse the the relationship between the variables of the data set and their effect on MPG. In particular the difference in MPG of automatic and manual transmission types is of interest. This report will quantify the difference in MPG for transmission types and will conclude, which transmission type is better for MPG, with higher MPG being better than lower MPG.
+
+### Exploring the data
+
+Variable "am" for transmission type. 0 = automatic, 1 = manual
+
+```{r}
+data(mtcars)
+head(mtcars)
+
+cormat <- cor(mtcars, method="pearson")
+cormat_m <- melt(cormat)
+
+g_cormat <- ggplot(cormat_m, aes(Var1, Var2, fill=value)) + geom_tile(color="white") + scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, limit=c(-1,1), space="Lab", name="Pearson\nCorrelation") + coord_fixed()
+```
+
+Blue variables have negative correlation with MPG, thus, seem to increase fuel consumption.
+
+
+```{r}
+g_boxplot <- ggplot(mtcars, aes(factor(am), mpg)) + geom_boxplot(aes(fill=factor(am))) + xlab("transmission type") + scale_x_discrete(labels = c("automatic", "manual"))
+
+
+g_boxplot_2 <- ggplot(mtcars[which(mtcars$wt < 3.2),], aes(factor(am), mpg)) + geom_boxplot(aes(fill=factor(am))) + xlab("transmission type") + scale_x_discrete(labels = c("automatic", "manual")) + scale_fill_discrete(labels = c("automatic", "manual")) + ggtitle("Cars weighing under 3.2 tons") +theme(legend.title=element_blank())
+
+g_boxplot_3 <- ggplot(mtcars[which(mtcars$wt >= 3.2),], aes(factor(am), mpg)) + geom_boxplot(aes(fill=factor(am))) + xlab("transmission type") + scale_x_discrete(labels = c("automatic", "manual")) + scale_fill_discrete(labels = c("automatic", "manual")) + ggtitle("Cars weighing 3.2 tons or more") + theme(legend.title=element_blank())
+```
+
+
+
+### Fitting multiple models and detail strategy for model selection
+
+We start with a linear model on mpg as the outcome and transmission type(am) as the predictor.
+
+```{r}
+fit_lm_am <- lm(mpg~factor(am), mtcars)
+summary(fit_lm_am)$coef
+```
+It seems, that based on the coeffcients of our model, having a manual transmission improves MPG on average by 7.2, with a p-value of less than 1%. The measure for R-squared is 36%, which means, that our model only accounts for 36% of the variability around it's mean.
+This means, that we might need more variables to better determine the impact of transmission types on MPG.
+
+Next, we select all variables for the prediction of MPG.
+```{r}
+fit_lm <- lm(mpg~., mtcars)
+summary(fit_lm)
+```
+Taking all variables into account, having a manual transmission improves the MPG by 2.52. But it could be that we overfitted our model.
+
+Taking the step function, to see which variables predict MPG the best.
+```{r results=FALSE}
+fit_step <- step(fit_lm)
+```
+Results are a model with weight, qsec and am as predictors.
+
+Anova for 4 models, adding a model with weight and qsec as the only variables, to see if it fits better without transmission types.
+```{r}
+fit_wt_qsec <- lm(mpg~wt+qsec, mtcars)
+
+anova(fit_lm_am,fit_step, fit_wt_qsec, fit_lm)
+```
+Model 2 is our best bet, to predict MPG. The residuals show, that we need more than the transmission type as predictor, since transmission type is also correlated with higher weight. 
+
+
+```{r}
+summary(fit_step)
+confint(fit_step)
+```
+On average, having a manual transmission, improves a cars MPG by 2.9 and an additional ton of weight, reduces MPG on average by 3.9. Slower acceleration, reported in qsec, improves MPG by 1.23, per additional second to finish a quater mile.
+
+Looking at the residuals, we can see, that the points do not seem to be randomly distributed.
+
+
+### Conclusion
+Based on the data, we cannot conclude which transmission type is better for mpg, since transmission types are heavily correlated with other influences on MPG, such as the weight of the car and the number of cylinders. Based on the analysis of variance (ANOVA), significant influence on a cars MPG, is driven by the variables weight, displacement and cylinders.
+
+
+### Appendix
+
+```{r echo=FALSE}
+plot_resid <- plot(fit_lm$resid)
+hist_resid <- hist(fit_step$residuals)
+g_cormat
+
+g_boxplot
+
+grid.arrange(g_boxplot_2, g_boxplot_3, ncol=2)
+```
+
